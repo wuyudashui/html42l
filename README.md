@@ -4,10 +4,10 @@
 
 ## 在线地址（手机直接用这个）
 
-**https://wuyudashui.github.io/HTML-**
+**https://wuyudashui.github.io/html42l/**
 
 手机浏览器打开即可，不需要局域网、不需要电脑开机、不需要装任何东西。
-仓库：https://github.com/wuyudashui/HTML-
+仓库：https://github.com/wuyudashui/html42l
 
 打开后：点 **＋** 选讲义 → 点 ⚙ 填 API Key → **长按正文选中一段** → 点「解释这段」。
 API Key 只存在你自己手机的浏览器里，不会上传到 GitHub 或任何服务器。
@@ -29,7 +29,7 @@ API Key 只存在你自己手机的浏览器里，不会上传到 GitHub 或任�
 
 **手机（推荐：直接用在线地址）**
 
-打开 **https://wuyudashui.github.io/HTML-** 即可，步骤同上：**＋** 选讲义 → ⚙ 配 API →
+打开 **https://wuyudashui.github.io/html42l/** 即可，步骤同上：**＋** 选讲义 → ⚙ 配 API →
 长按选中 → 「解释这段」。AI 面板是全屏抽屉，点右上角 **✕** 或点抽屉外遮罩收起。
 
 **手机（备选：局域网）**
