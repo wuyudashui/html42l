@@ -1,0 +1,1575 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>HTML 阅读 + AI 答疑</title>
+<!-- KaTeX 为可选增强：目录缺失时公式退化为原文，不影响其它功能 -->
+<link rel="stylesheet" href="assets/katex/katex.min.css" onerror="window.__noKatexCss=true">
+<style>
+  :root{
+    --bg:#f6f7f9; --panel:#fff; --line:#e4e6eb; --line-2:#eef0f3;
+    --text:#1b1d22; --muted:#6b7280; --muted-2:#9aa1ac;
+    --accent:#2f6fed; --accent-soft:#eaf0ff; --accent-line:#c8d8ff;
+    --danger:#d64545; --danger-soft:#fdecec; --ok:#1f9d6b;
+    --radius:10px; --shadow:0 1px 2px rgba(16,24,40,.06),0 4px 16px rgba(16,24,40,.06);
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  /* 移动浏览器地址栏会吃掉 100vh；有 dvh 就用动态视口高度 */
+  @supports (height:100dvh){ html,body{height:100dvh} }
+  body{
+    font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",system-ui,sans-serif;
+    color:var(--text); background:var(--bg);
+    display:flex; flex-direction:column; overflow:hidden;
+    overscroll-behavior:none;
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
+  }
+  button{font:inherit;color:inherit;cursor:pointer;touch-action:manipulation}
+  input,textarea{font:inherit;color:inherit}
+  /* iOS 上字号 <16px 会在聚焦时自动放大页面，输入框统一到 16px */
+  @supports (-webkit-touch-callout:none){
+    input,textarea{font-size:16px}
+  }
+
+  /* ---------------- 顶栏 ---------------- */
+  header.top{
+    flex:none; display:flex; align-items:center; gap:10px;
+    padding:0 10px; height:50px; background:var(--panel);
+    border-bottom:1px solid var(--line); position:relative; z-index:20;
+  }
+  .brand{display:flex;align-items:center;gap:8px;font-weight:650;letter-spacing:.2px;flex:none}
+  .brand .dot{width:8px;height:8px;border-radius:50%;background:var(--accent)}
+  .brand small{font-weight:500;color:var(--muted-2);font-size:11px}
+
+  .tabs{display:flex;gap:6px;overflow-x:auto;flex:1;min-width:0;padding:0 2px;scrollbar-width:thin}
+  .tab{
+    display:flex;align-items:center;gap:6px;flex:none;max-width:240px;
+    padding:6px 8px 6px 12px;border:1px solid var(--line);border-radius:99px;
+    background:#fbfbfc;color:var(--muted);font-size:12.5px;line-height:1;
+  }
+  .tab.active{background:var(--accent-soft);border-color:var(--accent-line);color:#1d3f8f}
+  .tab .name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .tab .x{
+    flex:none;width:16px;height:16px;border:0;border-radius:50%;background:transparent;
+    color:var(--muted-2);display:grid;place-items:center;font-size:13px;padding:0;
+  }
+  .tab .x:hover{background:#e9ebef;color:var(--danger)}
+
+  .top-actions{display:flex;gap:8px;flex:none;align-items:center}
+  .btn{
+    display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;
+    border:1px solid var(--line);border-radius:8px;background:var(--panel);
+    font-size:13px;white-space:nowrap;transition:.15s;
+  }
+  .btn:hover{background:#f3f4f7;border-color:#d6dae1}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .btn.primary:hover{filter:brightness(1.06)}
+  .btn.ghost{border-color:transparent;background:transparent}
+  .btn:disabled{opacity:.5;cursor:not-allowed}
+  .btn.icon{width:32px;padding:0;justify-content:center}
+
+  /* ---------------- 主体 ---------------- */
+  /* position:relative 是必需的：窄屏时 AI 面板以 absolute 抽屉形式覆盖，
+     没有这个定位上下文它会一直铺到视口顶部，把顶栏（含关闭按钮）盖住。 */
+  .main{flex:1;display:flex;min-height:0;position:relative}
+
+  .viewer{
+    flex:1;min-width:0;position:relative;background:#fff;
+    display:flex;flex-direction:column;
+  }
+  .viewer iframe{width:100%;height:100%;border:0;display:block;background:#fff}
+  .viewer[hidden]{display:none}
+
+  .drop{
+    position:absolute;inset:0;display:grid;place-items:center;padding:24px;
+    background:
+      radial-gradient(circle at 30% 20%, #eef3ff 0, transparent 45%),
+      radial-gradient(circle at 75% 80%, #f3f0ff 0, transparent 45%),
+      #fcfcfd;
+  }
+  .drop[hidden]{display:none}
+  .drop-card{
+    max-width:520px;text-align:center;border:1.5px dashed #cfd6e2;border-radius:16px;
+    padding:36px 32px;background:rgba(255,255,255,.85);backdrop-filter:blur(2px);
+  }
+  .drop-card h2{margin:0 0 8px;font-size:17px}
+  .drop-card p{margin:0 0 18px;color:var(--muted);font-size:13px;line-height:1.7}
+  .drop-card kbd{
+    font:12px ui-monospace,Consolas,monospace;background:#f0f2f6;border:1px solid var(--line);
+    border-bottom-width:2px;border-radius:5px;padding:1px 5px;
+  }
+  body.dragover .drop-card{border-color:var(--accent);background:#f5f8ff}
+  body.dragover .viewer{outline:2px dashed var(--accent);outline-offset:-8px}
+
+  /* ---------------- AI 面板 ---------------- */
+  .ai{
+    flex:none;width:390px;display:flex;flex-direction:column;min-height:0;
+    background:var(--panel);border-left:1px solid var(--line);
+  }
+  .ai[data-collapsed="1"]{width:0;overflow:hidden;border-left:0}
+  .ai-head{
+    flex:none;display:flex;align-items:center;gap:8px;padding:10px 12px;
+    border-bottom:1px solid var(--line-2);
+  }
+  .ai-head .title{font-weight:620;font-size:13.5px}
+  .ai-head .spacer{flex:1}
+  .pill{
+    font-size:11px;padding:2px 8px;border-radius:99px;background:#f1f3f6;color:var(--muted);
+    border:1px solid var(--line);white-space:nowrap;
+  }
+  .pill.ok{background:#eafaf3;border-color:#c7eedd;color:#137a52}
+  .pill.warn{background:#fff7e8;border-color:#ffe3b0;color:#8a5b00}
+
+  .ctx{
+    flex:none;margin:10px 12px 0;padding:8px 10px;border-radius:8px;
+    background:#f7f8fa;border:1px solid var(--line-2);
+    font-size:12px;color:var(--muted);display:flex;gap:8px;align-items:flex-start;
+  }
+  .ctx[hidden]{display:none}
+  .ctx .txt{flex:1;min-width:0;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+  .ctx b{color:#3b4252;font-weight:600}
+
+  .chat{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:12px}
+  .chat::-webkit-scrollbar{width:8px}
+  .chat::-webkit-scrollbar-thumb{background:#dfe3ea;border-radius:8px}
+
+  .msg{display:flex;flex-direction:column;gap:4px;max-width:100%}
+  .msg .role{font-size:11px;color:var(--muted-2);padding:0 2px}
+  .bubble{
+    padding:10px 12px;border-radius:10px;font-size:13.5px;line-height:1.72;
+    overflow-wrap:anywhere;word-break:break-word;
+  }
+  .msg.user{align-items:flex-end}
+  .msg.user .bubble{background:var(--accent-soft);border:1px solid var(--accent-line);color:#1a2b52}
+  .msg.assistant .bubble{background:#f7f8fa;border:1px solid var(--line-2)}
+  .msg.error .bubble{background:var(--danger-soft);border:1px solid #f6cccc;color:#96201f}
+  .bubble p{margin:0 0 8px}
+  .bubble p:last-child{margin-bottom:0}
+  .bubble h3,.bubble h4{margin:12px 0 6px;font-size:14px;line-height:1.4}
+  .bubble h3:first-child,.bubble h4:first-child{margin-top:0}
+  .bubble ul,.bubble ol{margin:6px 0 8px;padding-left:20px}
+  .bubble li{margin:2px 0}
+  .bubble code{
+    font:12.5px ui-monospace,Consolas,monospace;background:#eef0f4;border-radius:4px;
+    padding:1px 5px;border:1px solid #e3e6ec;
+  }
+  .bubble pre.code{margin:8px 0;padding:10px 12px;background:#1f2430;border-radius:8px;overflow-x:auto}
+  .bubble pre.code code{background:none;border:0;color:#e8ebf2;padding:0;font-size:12.5px}
+  .bubble blockquote{
+    margin:8px 0;padding:6px 10px;border-left:3px solid var(--accent-line);
+    background:#f4f7ff;color:#4a5266;border-radius:0 6px 6px 0;font-size:13px;
+  }
+  .bubble .katex{font-size:1.02em}
+  .bubble .katex-display{margin:8px 0;overflow-x:auto;overflow-y:hidden}
+
+  .typing{display:inline-flex;gap:3px;vertical-align:middle}
+  .typing i{width:5px;height:5px;border-radius:50%;background:var(--muted-2);animation:bl 1.1s infinite}
+  .typing i:nth-child(2){animation-delay:.15s}
+  .typing i:nth-child(3){animation-delay:.3s}
+  @keyframes bl{0%,60%,100%{opacity:.25;transform:translateY(0)}30%{opacity:1;transform:translateY(-2px)}}
+
+  .composer{flex:none;border-top:1px solid var(--line-2);padding:10px 12px 12px}
+  .composer .box{
+    border:1px solid var(--line);border-radius:10px;background:#fff;
+    padding:8px 8px 6px;transition:.15s;
+  }
+  .composer .box:focus-within{border-color:var(--accent-line);box-shadow:0 0 0 3px rgba(47,111,237,.08)}
+  .composer textarea{
+    width:100%;border:0;outline:0;resize:none;background:transparent;
+    font-size:13.5px;line-height:1.6;max-height:140px;min-height:38px;padding:2px 4px;
+  }
+  .composer .row{display:flex;align-items:center;gap:8px;margin-top:4px}
+  .composer .hint{font-size:11px;color:var(--muted-2);flex:1;min-width:0}
+  .send{
+    flex:none;height:30px;padding:0 14px;border-radius:8px;border:1px solid var(--accent);
+    background:var(--accent);color:#fff;font-size:13px;font-weight:520;
+  }
+  .send:disabled{opacity:.45;cursor:not-allowed}
+  .send.stop{background:#fff;color:var(--danger);border-color:#f0c2c2}
+
+  .setup{
+    margin:14px 12px;padding:14px;border-radius:10px;border:1px solid var(--line);
+    background:#fbfcfe;font-size:13px;color:var(--muted);line-height:1.7;
+  }
+  .setup b{color:var(--text)}
+  .setup .btn{margin-top:10px}
+
+  /* ---------------- 选中浮条 ---------------- */
+  #askbar{
+    position:fixed;z-index:60;display:flex;gap:0;padding:3px;border-radius:9px;
+    background:#23262e;box-shadow:0 6px 24px rgba(16,24,40,.22);
+    transform:translate(-50%,-100%);opacity:0;pointer-events:none;transition:opacity .12s;
+  }
+  #askbar.show{opacity:1;pointer-events:auto}
+  /* 选区贴近顶部时改到下方显示，否则浮条会被顶栏/屏幕边缘截掉 */
+  #askbar.below{transform:translate(-50%,0)}
+  #askbar button{
+    border:0;background:transparent;color:#e9ebf1;font-size:12.5px;
+    padding:5px 11px;border-radius:6px;white-space:nowrap;
+  }
+  #askbar button:hover{background:#3a3e49}
+  #askbar .sep{width:1px;background:#3a3e49;margin:4px 2px}
+
+  /* ---------------- 设置 ---------------- */
+  dialog{
+    border:0;padding:0;border-radius:14px;box-shadow:0 20px 60px rgba(16,24,40,.24);
+    width:min(520px,calc(100vw - 32px));background:var(--panel);color:var(--text);
+  }
+  dialog::backdrop{background:rgba(20,24,33,.42);backdrop-filter:blur(2px)}
+  .dlg-head{padding:16px 20px 10px;border-bottom:1px solid var(--line-2)}
+  .dlg-head h3{margin:0;font-size:15px}
+  .dlg-head p{margin:4px 0 0;font-size:12px;color:var(--muted)}
+  .dlg-body{padding:16px 20px;display:flex;flex-direction:column;gap:14px}
+  .field{display:flex;flex-direction:column;gap:6px}
+  .field label{font-size:12.5px;font-weight:600;color:#3b4252}
+  .field .help{font-size:11.5px;color:var(--muted-2);line-height:1.6}
+  .field input{
+    height:36px;padding:0 10px;border:1px solid var(--line);border-radius:8px;
+    font-size:13px;outline:0;transition:.15s;background:#fff;
+  }
+  .field input:focus{border-color:var(--accent-line);box-shadow:0 0 0 3px rgba(47,111,237,.08)}
+  .field .with-btn{display:flex;gap:8px}
+  .field .with-btn input{flex:1;min-width:0}
+  .endpoint{
+    font:11.5px ui-monospace,Consolas,monospace;color:#4a5266;background:#f4f6f9;
+    border:1px solid var(--line-2);border-radius:6px;padding:6px 8px;overflow-wrap:anywhere;
+  }
+  .warn-box{
+    font-size:12px;line-height:1.65;color:#8a5b00;background:#fff8e9;
+    border:1px solid #ffe4b5;border-radius:8px;padding:9px 11px;
+  }
+  .dlg-foot{
+    padding:12px 20px 16px;border-top:1px solid var(--line-2);
+    display:flex;gap:8px;align-items:center;
+  }
+  .dlg-foot .spacer{flex:1}
+  .test-out{font-size:12px;line-height:1.6;flex:1;min-width:0}
+  .test-out.ok{color:var(--ok)}
+  .test-out.bad{color:var(--danger)}
+
+  /* ---------------- 提示条 ---------------- */
+  #toasts{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:80;
+    display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none}
+  .toast{
+    background:#23262e;color:#f3f4f7;font-size:13px;padding:9px 16px;border-radius:9px;
+    box-shadow:0 8px 28px rgba(16,24,40,.24);animation:up .18s ease-out;max-width:min(520px,86vw);
+  }
+  .toast.bad{background:#8f2222}
+  .toast.ok{background:#17694a}
+  @keyframes up{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
+  .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+
+  /* ---------------- 窄屏 / 手机 ---------------- */
+  .only-narrow{display:none}
+  .ai-backdrop{
+    position:fixed; inset:0; z-index:35;
+    background:rgba(20,24,33,.45);
+    opacity:0; pointer-events:none; transition:opacity .2s;
+  }
+  .ai-backdrop.show{opacity:1;pointer-events:auto}
+
+  @media (max-width:900px){
+    .only-narrow{display:inline-flex}
+    .brand small,.brand-text{display:none}
+    /* 「打开 HTML」收成「＋」，给标签页腾出横向空间 */
+    .lbl{display:none}
+
+    header.top{
+      gap:6px; padding:0 8px;
+      height:calc(54px + env(safe-area-inset-top));
+      padding-top:env(safe-area-inset-top);
+    }
+    .top-actions{gap:6px}
+    .btn{height:36px;padding:0 11px}
+    .btn.icon{width:36px}
+    /* 「打开 HTML」的文字已隐藏，收成与另外两个图标按钮同宽的方形 */
+    #btnOpen{width:36px;padding:0;justify-content:center;font-size:17px}
+
+    .tabs{gap:5px}
+    .tab{max-width:52vw;font-size:13px;padding:7px 8px 7px 11px}
+    .tab .x{width:22px;height:22px;font-size:15px}
+
+    /* AI 面板改成全屏抽屉：内容区不被压成一条缝，且有明确的关闭入口 */
+    .ai{
+      position:fixed; inset:0; width:100%; z-index:40;
+      border-left:0;
+      /* 软键盘弹出时 visualViewport 变矮，用它约束高度，
+         否则输入框会被键盘盖住（fixed 元素不跟随 visual viewport） */
+      height:var(--app-h,100%);
+      padding-top:env(safe-area-inset-top);
+      padding-bottom:env(safe-area-inset-bottom);
+      transition:transform .2s ease;
+    }
+    .ai[data-collapsed="1"]{display:none}
+    .ai-head{height:52px}
+    .viewer{width:100%}
+
+    /* 浮条：触屏点按区域放大，避免误触 */
+    #askbar{padding:4px;border-radius:10px}
+    #askbar button{padding:9px 14px;font-size:14px;min-height:38px}
+
+    .composer textarea{min-height:44px;max-height:120px}
+    .send{height:36px;padding:0 16px}
+
+    /* 设置改成底部弹层，按钮排两行也点得准 */
+    dialog{
+      position:fixed; left:0; right:0; bottom:0; top:auto; margin:0;
+      width:100%; max-width:100%;
+      border-radius:16px 16px 0 0;
+      max-height:90dvh;
+    }
+    .dlg-body{overflow-y:auto}
+    .field input{height:44px}
+    .dlg-foot{flex-wrap:wrap;gap:8px}
+    .dlg-foot .spacer{display:none}
+    .dlg-foot .btn{flex:1;min-width:84px;justify-content:center;height:42px}
+    .dlg-foot .test-out{flex-basis:100%}
+  }
+
+  @media (max-width:420px){
+    .tab{max-width:44vw}
+    .brand{display:none}
+  }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="brand"><span class="dot"></span><span class="brand-text">HTML 答疑</span><small>选中任意文字 → 问 AI</small></div>
+  <div class="tabs" id="tabs" role="tablist" aria-label="已打开的 HTML"></div>
+  <div class="top-actions">
+    <button class="btn" id="btnOpen" type="button" aria-label="打开 HTML 文件">＋<span class="lbl"> 打开 HTML</span></button>
+    <button class="btn icon" id="btnAiToggle" type="button" title="显示/隐藏 AI 面板" aria-label="显示或隐藏 AI 面板">◧</button>
+    <button class="btn icon" id="btnSettings" type="button" title="AI 配置" aria-label="AI 配置">⚙</button>
+  </div>
+  <!-- 不写 accept：手机的文件选择器会按 MIME 过滤，.html 常常被直接隐藏掉。
+       改在 JS 里按扩展名校验，桌面与手机行为一致。 -->
+  <input type="file" id="fileInput" multiple hidden>
+</header>
+
+<div class="ai-backdrop" id="aiBackdrop"></div>
+
+<div class="main">
+  <main class="viewer" id="viewer" hidden>
+    <iframe id="frame" title="讲义内容"></iframe>
+  </main>
+
+  <div class="drop" id="drop">
+    <div class="drop-card">
+      <h2>把一个 HTML 拖到这里</h2>
+      <p>
+        支持 2L 讲义等单文件 HTML，可一次拖入多个，顶部会出现标签页随时切换。<br>
+        打开后在正文里<b>用鼠标选中一段文字</b>，右侧即可让 AI 针对这段作答。
+      </p>
+      <button class="btn primary" id="btnPick" type="button">选择文件…</button>
+      <p style="margin:16px 0 0;font-size:12px;color:var(--muted-2)">
+        也可以直接按 <kbd>Ctrl</kbd> + <kbd>O</kbd>
+      </p>
+    </div>
+  </div>
+
+  <aside class="ai" id="ai" aria-label="AI 答疑面板">
+    <div class="ai-head">
+      <span class="title">AI 答疑</span>
+      <span class="pill" id="aiPill">未配置</span>
+      <span class="spacer"></span>
+      <button class="btn ghost icon" id="btnClearChat" type="button" title="清空当前对话" aria-label="清空当前对话">🗑</button>
+      <button class="btn ghost icon only-narrow" id="btnAiClose" type="button" title="收起面板" aria-label="收起 AI 面板">✕</button>
+    </div>
+
+    <div class="ctx" id="ctx" hidden>
+      <span class="txt" id="ctxText"></span>
+      <button class="btn ghost icon" id="btnClearCtx" type="button" title="清除引用" aria-label="清除引用"
+        style="width:22px;height:22px;font-size:14px;flex:none">×</button>
+    </div>
+
+    <div class="chat" id="chat" aria-live="polite"></div>
+
+    <div class="setup" id="setup">
+      <b>先配置 AI 接口</b><br>
+      填入 API Key、Base URL 与模型名即可开始。选中正文文字后可以针对那一段提问。
+      <br><button class="btn primary" id="btnSetup" type="button">去配置</button>
+    </div>
+
+    <div class="composer" id="composer">
+      <div class="box">
+        <textarea id="input" rows="1" placeholder="针对选中的内容提问…" spellcheck="false"></textarea>
+        <div class="row">
+          <span class="hint" id="hint"></span>
+          <button class="send" id="btnSend" type="button">发送</button>
+        </div>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<div id="askbar" role="toolbar" aria-label="对选中内容提问">
+  <button type="button" data-act="explain">解释这段</button>
+  <span class="sep"></span>
+  <button type="button" data-act="custom">提问…</button>
+</div>
+
+<dialog id="settings">
+  <form method="dialog" id="settingsForm">
+    <div class="dlg-head">
+      <h3>AI 接口配置</h3>
+      <p>兼容 OpenAI Chat Completions 协议的服务都可用。</p>
+    </div>
+    <div class="dlg-body">
+      <div class="field">
+        <label for="inKey">API Key</label>
+        <div class="with-btn">
+          <input id="inKey" type="password" autocomplete="off" spellcheck="false" placeholder="sk-…">
+          <button class="btn" id="btnEye" type="button" style="flex:none">显示</button>
+        </div>
+      </div>
+      <div class="field">
+        <label for="inBase">Base URL</label>
+        <input id="inBase" type="text" autocomplete="off" spellcheck="false"
+               placeholder="https://api.deepseek.com/v1">
+        <div class="help">可填以 <code>/v1</code> 结尾的基址，也可直接填完整的 <code>/chat/completions</code> 地址。</div>
+        <div class="endpoint" id="endpointPreview">实际请求：—</div>
+      </div>
+      <div class="field">
+        <label for="inModel">模型名</label>
+        <input id="inModel" type="text" autocomplete="off" spellcheck="false" placeholder="deepseek-chat">
+      </div>
+      <div class="warn-box">
+        Key 以<b>明文</b>保存在本机浏览器 localStorage，只在你点发送时发往上面填的地址。
+        公用电脑上不要保存，用完请点「清除」。
+      </div>
+    </div>
+    <div class="dlg-foot">
+      <span class="test-out" id="testOut"></span>
+      <button class="btn" id="btnTest" type="button">测试连接</button>
+      <button class="btn" id="btnClearKey" type="button">清除</button>
+      <span class="spacer"></span>
+      <button class="btn" value="cancel" type="submit">取消</button>
+      <button class="btn primary" id="btnSave" value="save" type="submit">保存</button>
+    </div>
+  </form>
+</dialog>
+
+<div id="toasts" aria-live="assertive"></div>
+
+<script src="assets/katex/katex.min.js" onerror="window.__noKatexJs=true"></script>
+<script>
+(function(){
+  'use strict';
+
+  /* ==================================================================
+   * 0. 小工具
+   * ================================================================== */
+  const $ = (s, r) => (r || document).querySelector(s);
+  const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
+
+  /** HTML 转义：凡是拼进 innerHTML 的用户/AI 文本都必须先过这里。 */
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c => (
+      { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+    ));
+  }
+
+  /** 生成不依赖 crypto 的稳定 id（file:// 下 crypto.randomUUID 可能不可用）。 */
+  let seq = 0;
+  function uid() {
+    seq += 1;
+    return 't' + Date.now().toString(36) + seq.toString(36);
+  }
+
+  function toast(msg, kind) {
+    const box = $('#toasts');
+    const el = document.createElement('div');
+    el.className = 'toast' + (kind ? ' ' + kind : '');
+    el.textContent = msg;
+    box.appendChild(el);
+    setTimeout(() => {
+      el.style.transition = 'opacity .2s';
+      el.style.opacity = '0';
+      setTimeout(() => el.remove(), 220);
+    }, kind === 'bad' ? 6000 : 3000);
+  }
+
+  /* ==================================================================
+   * 1. 配置（localStorage，失败则退回内存）
+   * ================================================================== */
+  const CFG_KEY = 'html-ai-reader/settings';
+  const DEFAULT_CFG = {
+    apiKey: '',
+    baseUrl: 'https://api.deepseek.com/v1',
+    model: 'deepseek-chat'
+  };
+
+  let cfg = Object.assign({}, DEFAULT_CFG);
+  let storageOk = true;
+
+  function loadCfg() {
+    try {
+      const raw = localStorage.getItem(CFG_KEY);
+      if (raw) cfg = Object.assign({}, DEFAULT_CFG, JSON.parse(raw));
+    } catch (e) {
+      storageOk = false;
+    }
+  }
+
+  function saveCfg() {
+    try {
+      localStorage.setItem(CFG_KEY, JSON.stringify(cfg));
+      return true;
+    } catch (e) {
+      storageOk = false;
+      return false;
+    }
+  }
+
+  function cfgReady() {
+    return !!(cfg.apiKey && cfg.baseUrl && cfg.model);
+  }
+
+  /**
+   * 把用户填的 Base URL 归一化成真正的 chat/completions 端点。
+   *
+   * 三种常见写法都要能接受，否则用户会得到 404 却看不出原因：
+   *   https://api.deepseek.com          → …/v1/chat/completions
+   *   https://api.deepseek.com/v1       → …/v1/chat/completions
+   *   https://x/v1/chat/completions     → 原样使用
+   */
+  function resolveEndpoint(baseUrl) {
+    let u = String(baseUrl || '').trim().replace(/\s+/g, '');
+    if (!u) throw new Error('未填写 Base URL');
+    u = u.replace(/\/+$/, '');
+    if (/\/chat\/completions$/i.test(u)) return u;
+    if (/\/v\d+[a-z0-9]*$/i.test(u)) return u + '/chat/completions';
+    if (/\/completions$/i.test(u)) return u;
+    return u + '/v1/chat/completions';
+  }
+
+  /* ==================================================================
+   * 2. 标签页与文档状态
+   * ================================================================== */
+  /** @type {{id:string,name:string,html:string,messages:Array}[]} */
+  let tabs = [];
+  let activeId = null;
+  let pendingSelection = null; // {text, heading}
+  let abortCtrl = null;
+  let streaming = false;
+
+  function activeTab() {
+    return tabs.find(t => t.id === activeId) || null;
+  }
+
+  /* ==================================================================
+   * 3. 打开文件
+   * ================================================================== */
+  const fileInput = $('#fileInput');
+  const frame = $('#frame');
+  const viewer = $('#viewer');
+  const drop = $('#drop');
+
+  /**
+   * srcdoc 兼容 shim。
+   *
+   * 为什么必须有：srcdoc iframe 的文档 URL 是 `about:srcdoc`，
+   * 而讲义自带的脚本（例如 2L 的 navigation.js）会调
+   * `history.replaceState(null, '', '#chapter-1')`。这会把相对地址解析成
+   * 父页面的 URL，与文档自身 URL 不一致，于是抛
+   *   SecurityError: A history state object with URL ... cannot be created
+   *   in a document with origin 'file://' and URL 'about:srcdoc'.
+   *
+   * 危害不止"控制台多一条红字"：2L 的 show() 是先 replaceState、
+   * 再 scrollIntoView，异常一抛后面那步就被跳过——切换要点后不会滚回顶部，
+   * 长讲义里用户会停在中段。把这两个写入接口置空，UI 逻辑照常跑完。
+   *
+   * 只影响 iframe 内的历史记录写入；讲义本身不依赖 hash 做深链。
+   */
+  const FRAME_SHIM =
+    '<script>try{history.replaceState=function(){};history.pushState=function(){}}catch(e){}<' + '/script>';
+
+  function withCompatShim(html) {
+    // 必须在讲义自己的脚本之前执行，所以插在 <head> 之后
+    if (/<head[^>]*>/i.test(html)) return html.replace(/<head[^>]*>/i, m => m + FRAME_SHIM);
+    if (/<html[^>]*>/i.test(html)) return html.replace(/<html[^>]*>/i, m => m + FRAME_SHIM);
+    if (/<!doctype[^>]*>/i.test(html)) return html.replace(/<!doctype[^>]*>/i, m => m + FRAME_SHIM);
+    return FRAME_SHIM + html;
+  }
+
+  /**
+   * 取 HTML 里的 <title> 作为标签页显示名。
+   *
+   * 2l 导出的文件常常都叫「讲解.html」，只看文件名根本分不清是哪一科。
+   * 标题才是真正的区分点，文件名退居为 tooltip。
+   */
+  function titleOf(html, fallback) {
+    try {
+      const m = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+      if (m) {
+        const t = document.createElement('textarea');
+        t.innerHTML = m[1];
+        const s = String(t.value || '').replace(/\s+/g, ' ').trim();
+        if (s) return s;
+      }
+    } catch (e) { /* 解析失败就用文件名 */ }
+    return fallback;
+  }
+
+  async function openFiles(fileList) {
+    const picked = Array.from(fileList || []);
+    // 空列表通常是用户点了取消，不该弹红色错误
+    if (!picked.length) return;
+
+    const files = picked.filter(f => /\.html?$/i.test(f.name) || /html/i.test(f.type));
+    if (!files.length) {
+      // 选了文件但都不是 HTML：必须给反馈，否则用户以为点了没反应。
+      // （手机选择器不再用 accept 过滤，选错格式的可能性变高了）
+      toast('只支持 .html / .htm 文件，刚才选的是：' +
+        picked.map(f => f.name).slice(0, 3).join('、'), 'bad');
+      return;
+    }
+    for (const file of files) {
+      try {
+        const html = await file.text();
+        if (!/<html[\s>]/i.test(html) && !/<body[\s>]/i.test(html)) {
+          toast(file.name + ' 看起来不是完整 HTML，已跳过', 'bad');
+          continue;
+        }
+        // 同名文件视为「重新载入」：替换内容而不是再开一个标签
+        const same = tabs.find(t => t.name === file.name);
+        if (same) {
+          same.html = html;
+          same.title = titleOf(html, file.name);
+          same.messages = [];
+          activate(same.id);
+          toast('已重新载入 ' + file.name, 'ok');
+        } else {
+          const tab = {
+            id: uid(),
+            name: file.name,
+            title: titleOf(html, file.name),
+            html: html,
+            messages: []
+          };
+          tabs.push(tab);
+          activate(tab.id);
+        }
+      } catch (e) {
+        toast('读取 ' + file.name + ' 失败：' + e.message, 'bad');
+      }
+    }
+    renderTabs();
+  }
+
+  function activate(id) {
+    const tab = tabs.find(t => t.id === id);
+    if (!tab) return;
+    activeId = id;
+    pendingSelection = null;
+    clearCtx();
+    hideAskbar();
+    drop.hidden = true;
+    viewer.hidden = false;
+    frame.srcdoc = withCompatShim(tab.html);
+    renderTabs();
+    renderChat();
+  }
+
+  function closeTab(id) {
+    const i = tabs.findIndex(t => t.id === id);
+    if (i < 0) return;
+    tabs.splice(i, 1);
+    if (activeId === id) {
+      const next = tabs[Math.min(i, tabs.length - 1)];
+      if (next) {
+        activate(next.id);
+      } else {
+        activeId = null;
+        viewer.hidden = true;
+        frame.srcdoc = '';
+        drop.hidden = false;
+        renderChat();
+      }
+    }
+    renderTabs();
+  }
+
+  function renderTabs() {
+    const box = $('#tabs');
+    box.textContent = '';
+    tabs.forEach(t => {
+      const el = document.createElement('div');
+      el.className = 'tab' + (t.id === activeId ? ' active' : '');
+      el.setAttribute('role', 'tab');
+      el.setAttribute('aria-selected', t.id === activeId ? 'true' : 'false');
+      // 显示名用 <title>，悬停显示真实文件名
+      el.title = t.title && t.title !== t.name ? t.title + ' — ' + t.name : t.name;
+
+      const name = document.createElement('span');
+      name.className = 'name';
+      name.textContent = t.title || t.name.replace(/\.html?$/i, '');
+      el.appendChild(name);
+
+      const x = document.createElement('button');
+      x.className = 'x';
+      x.type = 'button';
+      x.title = '关闭';
+      x.setAttribute('aria-label', '关闭 ' + (t.title || t.name));
+      x.textContent = '×';
+      x.addEventListener('click', ev => { ev.stopPropagation(); closeTab(t.id); });
+      el.appendChild(x);
+
+      el.addEventListener('click', () => activate(t.id));
+      box.appendChild(el);
+    });
+  }
+
+  /* ==================================================================
+   * 4. 选中文字 → 浮动工具条
+   *
+   * 桌面靠 mouseup；**触屏不会可靠地触发 mouseup**（长按拖选走的是
+   * 原生选择手柄 + selectionchange）。两种都要接：
+   *   - mouseup / keyup：鼠标与键盘选择
+   *   - selectionchange：触屏选择，防抖后处理
+   * 而且点击浮条时不能依赖"选区此刻还在"——iOS 上点浮条会让输入框/面板
+   * 抢焦点并清掉选区，所以在浮条出现的那一刻就把文本和标题存下来。
+   * ================================================================== */
+  const askbar = $('#askbar');
+
+  /** 浮条出现时捕获的选区快照；点击浮条时用它，而不是重新读。 */
+  let askbarInfo = null;
+  let selTimer = null;
+
+  /** 防抖：触屏拖选过程中 selectionchange 会连续触发。 */
+  function scheduleAskbar(delay) {
+    clearTimeout(selTimer);
+    selTimer = setTimeout(updateAskbar, delay == null ? 180 : delay);
+  }
+
+  /** srcdoc iframe 与父页面同源，所以可以直接读它内部的选择。 */
+  function attachSelectionHooks() {
+    let doc;
+    try {
+      doc = frame.contentDocument;
+    } catch (e) {
+      return; // 理论上不会发生；保底不抛
+    }
+    if (!doc) return;
+
+    const onUp = () => setTimeout(updateAskbar, 10);
+    doc.addEventListener('mouseup', onUp);
+    doc.addEventListener('keyup', onUp);
+    // 触屏：长按拖选后由浏览器补发 selectionchange
+    doc.addEventListener('selectionchange', () => scheduleAskbar(180));
+    doc.addEventListener('touchend', () => scheduleAskbar(220), { passive: true });
+    // 滚动后选区位置失效，直接收起
+    doc.addEventListener('scroll', hideAskbar, true);
+    frame.contentWindow.addEventListener('scroll', hideAskbar, true);
+  }
+
+  function hideAskbar() {
+    askbar.classList.remove('show');
+  }
+
+  /** 读取当前选区；无效选择返回 null。 */
+  function readSelection() {
+    let win, doc;
+    try {
+      win = frame.contentWindow;
+      doc = frame.contentDocument;
+      const sel = win.getSelection();
+      if (!sel || sel.rangeCount === 0) return null;
+      const text = String(sel.toString() || '').trim();
+      if (text.length < 2) return null;
+      const range = sel.getRangeAt(0);
+      if (range.collapsed) return null;
+      const rect = range.getBoundingClientRect();
+      if (!rect || (rect.width === 0 && rect.height === 0)) return null;
+      return { text: text, heading: nearestHeading(range.startContainer, doc), rect: rect, win: win };
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /** 向上找最近的标题，作为「这段在讲什么」的上下文。 */
+  function nearestHeading(node, doc) {
+    let el = node && node.nodeType === 3 ? node.parentElement : node;
+    let guard = 0;
+    while (el && guard++ < 400) {
+      if (/^H[1-6]$/.test(el.tagName || '')) return el.textContent.trim();
+      let sib = el.previousElementSibling;
+      while (sib) {
+        if (/^H[1-6]$/.test(sib.tagName || '')) return sib.textContent.trim();
+        sib = sib.previousElementSibling;
+      }
+      el = el.parentElement;
+    }
+    return '';
+  }
+
+  function updateAskbar() {
+    const info = readSelection();
+    if (!info) {
+      askbarInfo = null;
+      hideAskbar();
+      return;
+    }
+
+    // 选区坐标是 iframe 视口坐标，需加上 iframe 在页面中的偏移
+    const host = frame.getBoundingClientRect();
+    const cx = host.left + info.rect.left + info.rect.width / 2;
+    const topY = host.top + info.rect.top;
+    const bottomY = host.top + info.rect.bottom;
+
+    const vw = window.innerWidth;
+    const half = 86;                       // 浮条宽度约 172，用于防出界
+    const x = Math.max(half + 8, Math.min(vw - half - 8, cx));
+    // 上方空间不足（靠近顶栏/屏幕顶）时改到选区下方，避免被裁掉
+    const above = (topY - 10) > 96;
+
+    askbar.classList.toggle('below', !above);
+    askbar.style.left = Math.round(x) + 'px';
+    askbar.style.top = Math.round(above ? topY - 8 : bottomY + 8) + 'px';
+
+    askbarInfo = { text: info.text, heading: info.heading };
+    askbar.classList.add('show');
+  }
+
+  // 桌面：按下时阻止默认，避免点击浮条把选区清掉
+  askbar.addEventListener('mousedown', e => e.preventDefault());
+  // 触屏：同理，阻止按下就触发选中折叠
+  askbar.addEventListener('touchstart', e => e.preventDefault(), { passive: false });
+
+  askbar.addEventListener('click', e => {
+    const btn = e.target.closest('button[data-act]');
+    if (!btn) return;
+
+    // 优先用浮条出现时的快照：触屏上此刻选区可能已经被折叠
+    const snap = askbarInfo || readSelection();
+    if (!snap) { hideAskbar(); return; }
+
+    pendingSelection = { text: snap.text, heading: snap.heading };
+    renderCtx();
+
+    // 收起选区，避免浮条一直挂着
+    try { frame.contentWindow.getSelection().removeAllRanges(); } catch (err) {}
+    askbarInfo = null;
+    hideAskbar();
+
+    if (btn.dataset.act === 'explain') {
+      send('请解释这段内容的含义和作用。如果涉及公式，请说明每个符号代表什么。', pendingSelection);
+    } else {
+      // 窄屏上 AI 面板是全屏的，必须先把它打开，否则输入框不可见
+      setAiOpen(true);
+      const input = $('#input');
+      input.focus();
+      input.setSelectionRange(input.value.length, input.value.length);
+      toast('已引用这段文字，输入你的问题后发送');
+    }
+  });
+
+  function renderCtx() {
+    const box = $('#ctx');
+    const txt = $('#ctxText');
+    if (!pendingSelection) { box.hidden = true; return; }
+    box.hidden = false;
+    const h = pendingSelection.heading ? '【' + pendingSelection.heading + '】' : '';
+    const t = pendingSelection.text.replace(/\s+/g, ' ');
+    txt.innerHTML = '<b>引用</b> ' + esc(h) + esc(t.slice(0, 120)) + (t.length > 120 ? '…' : '');
+  }
+
+  function clearCtx() {
+    pendingSelection = null;
+    renderCtx();
+  }
+
+  /* ==================================================================
+   * 5. 轻量 Markdown 渲染
+   *
+   * 安全约定：先把代码块/公式抽成占位符 → 整体转义 → 再插入受控标签。
+   * 这样 AI 输出里的任何 HTML 都只会变成文本，不会被浏览器执行。
+   * ================================================================== */
+  function katexOk() {
+    return !!(window.katex && typeof window.katex.renderToString === 'function');
+  }
+
+  function mathHtml(tex, display) {
+    if (katexOk()) {
+      try {
+        return window.katex.renderToString(String(tex).trim(), {
+          displayMode: display, throwOnError: false, strict: false
+        });
+      } catch (e) { /* 落到下面的降级 */ }
+    }
+    return '<code>' + esc(tex) + '</code>';
+  }
+
+  function renderMD(src) {
+    const held = [];
+    const hold = html => '\u0000' + (held.push(html) - 1) + '\u0000';
+    let s = String(src == null ? '' : src).replace(/\r\n?/g, '\n');
+
+    // 1) 围栏代码块
+    s = s.replace(/```[^\n]*\n([\s\S]*?)```/g, (m, code) =>
+      hold('<pre class="code"><code>' + esc(code.replace(/\n$/, '')) + '</code></pre>'));
+
+    // 2) 块级公式 $$...$$（连同独占一行的换行一起换掉）
+    s = s.replace(/^[ \t]*\$\$([\s\S]+?)\$\$[ \t]*$/gm, (m, tex) => hold(mathHtml(tex, true)));
+
+    // 3) 行内代码
+    s = s.replace(/`([^`\n]+)`/g, (m, code) => hold('<code>' + esc(code) + '</code>'));
+
+    // 4) 行内公式 $...$
+    s = s.replace(/\$([^$\n]+?)\$/g, (m, tex) => hold(mathHtml(tex, false)));
+
+    // 5) 到这里才整体转义，之前的占位符不含特殊字符，安全通过
+    s = esc(s);
+
+    // 6) 引用块
+    s = s.replace(/(?:^|\n)((?:&gt;[^\n]*(?:\n|$))+)/g, (m, block) => {
+      const inner = block.trim().split('\n')
+        .map(l => l.replace(/^&gt;\s?/, '')).join('<br>');
+      return '\n<blockquote>' + inner + '</blockquote>\n';
+    });
+
+    // 7) 标题
+    s = s.replace(/^######\s+(.+)$/gm, '<h4>$1</h4>')
+         .replace(/^#{3,5}\s+(.+)$/gm, '<h4>$1</h4>')
+         .replace(/^#{1,2}\s+(.+)$/gm, '<h3>$1</h3>');
+
+    // 8) 强调（先粗后斜，避免互相吃掉）
+    s = s.replace(/\*\*([^*\n]+?)\*\*/g, '<strong>$1</strong>');
+    s = s.replace(/(^|[^*])\*([^*\n]+?)\*(?!\*)/g, '$1<em>$2</em>');
+
+    // 9) 无序 / 有序列表
+    s = s.replace(/(?:^|\n)((?:[ \t]*[-*+][ \t]+[^\n]*(?:\n|$))+)/g, (m, block) => {
+      const items = block.trim().split('\n')
+        .map(l => l.replace(/^[ \t]*[-*+][ \t]+/, '')).map(l => '<li>' + l + '</li>').join('');
+      return '\n<ul>' + items + '</ul>\n';
+    });
+    s = s.replace(/(?:^|\n)((?:[ \t]*\d+[.)][ \t]+[^\n]*(?:\n|$))+)/g, (m, block) => {
+      const items = block.trim().split('\n')
+        .map(l => l.replace(/^[ \t]*\d+[.)][ \t]+/, '')).map(l => '<li>' + l + '</li>').join('');
+      return '\n<ol>' + items + '</ol>\n';
+    });
+
+    // 10) 段落
+    s = s.split(/\n{2,}/).map(block => {
+      const t = block.trim();
+      if (!t) return '';
+      if (/^<(h3|h4|pre|ul|ol|blockquote)/.test(t)) return t;
+      if (/^\u0000\d+\u0000$/.test(t)) return t;           // 独占一段的公式/代码
+      return '<p>' + t.replace(/\n/g, '<br>') + '</p>';
+    }).join('\n');
+
+    // 11) 还原占位符
+    for (let i = 0; i < 4; i++) {
+      if (!s) break;
+      const before = s;
+      s = s.replace(/\u0000(\d+)\u0000/g, (m, n) => held[Number(n)] != null ? held[Number(n)] : '');
+      if (s === before) break;
+    }
+    return s;
+  }
+
+  /* ==================================================================
+   * 6. 对话渲染
+   * ================================================================== */
+  const chat = $('#chat');
+
+  function renderChat() {
+    chat.textContent = '';
+    const tab = activeTab();
+    const msgs = tab ? tab.messages : [];
+
+    if (!msgs.length) {
+      const tip = document.createElement('div');
+      tip.style.cssText = 'color:#9aa1ac;font-size:12.5px;line-height:1.8;padding:6px 4px';
+      tip.textContent = tab
+        ? '在正文里选中一段文字，会出现「解释这段 / 提问…」。也可以直接在下面输入问题。'
+        : '还没有打开 HTML。拖入一个文件开始。';
+      chat.appendChild(tip);
+    }
+
+    msgs.forEach(m => chat.appendChild(buildMsg(m.role, m.content, m.error)));
+    scrollChat();
+  }
+
+  function buildMsg(role, content, isError) {
+    const wrap = document.createElement('div');
+    wrap.className = 'msg ' + (isError ? 'error' : role);
+
+    const who = document.createElement('div');
+    who.className = 'role';
+    who.textContent = role === 'user' ? '你' : (isError ? '出错了' : 'AI');
+    wrap.appendChild(who);
+
+    const bub = document.createElement('div');
+    bub.className = 'bubble';
+    if (role === 'assistant' && !isError) {
+      bub.innerHTML = renderMD(content);
+    } else {
+      bub.style.whiteSpace = 'pre-wrap';
+      bub.textContent = content;
+    }
+    wrap.appendChild(bub);
+    return wrap;
+  }
+
+  function scrollChat() {
+    chat.scrollTop = chat.scrollHeight;
+  }
+
+  /* ==================================================================
+   * 7. 调模型
+   * ================================================================== */
+  function systemPrompt() {
+    return [
+      '你是一位耐心的阅读答疑助手。用户正在阅读一份 HTML 讲义，会针对其中一段文字提问。',
+      '要求：',
+      '1. 只围绕用户给出的内容和问题作答，不要扯到无关话题。',
+      '2. 先给结论，再解释原因；必要时举一个最小的例子。',
+      '3. 数学公式用 LaTeX，行内用 $...$，独立成行用 $$...$$。',
+      '4. 输出用 Markdown（标题、列表、代码块）。不要重复粘贴用户选中的原文。',
+      '5. 如果提供的信息不足以回答，直接说明缺什么，不要编造。'
+    ].join('\n');
+  }
+
+  function buildUserContent(question, sel) {
+    const parts = [];
+    if (sel && sel.text) {
+      parts.push('【选中的内容】\n' + sel.text);
+      if (sel.heading) parts.push('【所在小节】' + sel.heading);
+    }
+    const tab = activeTab();
+    if (tab) parts.push('【讲义】' + (tab.title || tab.name.replace(/\.html?$/i, '')));
+    parts.push('【问题】' + question);
+    return parts.join('\n\n');
+  }
+
+  async function send(question, sel) {
+    const tab = activeTab();
+    if (!tab) { toast('请先打开一个 HTML 文件', 'bad'); return; }
+    if (!cfgReady()) { openSettings(); toast('请先填写 API Key / Base URL / 模型名', 'bad'); return; }
+    if (streaming) return;
+
+    const q = String(question || '').trim();
+    if (!q) return;
+
+    // 窄屏上面板是覆盖式的：如果它是收起的，发送后必须展开，
+    // 否则用户按了「解释这段」却看不到任何回答。
+    if ($('#ai').dataset.collapsed === '1') setAiOpen(true);
+
+    // 用户气泡
+    const userText = (sel && sel.text)
+      ? '「' + sel.text.replace(/\s+/g, ' ').slice(0, 160) + (sel.text.length > 160 ? '…' : '') + '」\n\n' + q
+      : q;
+    tab.messages.push({ role: 'user', content: userText });
+    renderChat();
+
+    // 组织上下文：系统提示 + 最近若干轮 + 本次问题
+    const history = tab.messages
+      .filter(m => !m.error)
+      .slice(-8)
+      .map(m => ({ role: m.role, content: m.content }));
+    // 最后一条就是本次问题（带引用块），但从模型视角看它应当包含完整选区
+    history[history.length - 1] = { role: 'user', content: buildUserContent(q, sel) };
+
+    await streamReply(tab, [{ role: 'system', content: systemPrompt() }].concat(history));
+  }
+
+  async function streamReply(tab, messages) {
+    const placeholder = { role: 'assistant', content: '' };
+    tab.messages.push(placeholder);
+    renderChat();
+
+    const wrap = chat.lastElementChild;
+    const bubble = wrap && wrap.querySelector('.bubble');
+    if (bubble) {
+      bubble.innerHTML = '<span class="typing"><i></i><i></i><i></i></span>';
+    }
+
+    setStreaming(true);
+    abortCtrl = new AbortController();
+    let acc = '';
+
+    try {
+      const endpoint = resolveEndpoint(cfg.baseUrl);
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + cfg.apiKey
+        },
+        body: JSON.stringify({
+          model: cfg.model,
+          messages: messages,
+          stream: true,
+          temperature: 0.3
+        }),
+        signal: abortCtrl.signal
+      });
+
+      if (!res.ok) {
+        const detail = await safeText(res);
+        throw new Error(httpErrorText(res.status, detail));
+      }
+
+      if (!res.body) {
+        // 少数环境拿不到流，退回整体读取
+        const detail = await safeText(res);
+        acc = parseNonStream(detail);
+        placeholder.content = acc;
+        renderChat();
+        return;
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+      let buffer = '';
+      let firstDelta = true;
+
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        let idx;
+        while ((idx = buffer.indexOf('\n')) >= 0) {
+          const line = buffer.slice(0, idx).replace(/\r$/, '').trim();
+          buffer = buffer.slice(idx + 1);
+          if (!line || line.startsWith(':')) continue;
+          if (!line.startsWith('data:')) continue;
+          const data = line.slice(5).trim();
+          if (!data) continue;
+          if (data === '[DONE]') { buffer = ''; break; }
+
+          let delta = '';
+          try {
+            const obj = JSON.parse(data);
+            const choice = obj.choices && obj.choices[0];
+            delta = (choice && choice.delta && choice.delta.content) || '';
+            if (!delta && choice && choice.message && choice.message.content) {
+              delta = choice.message.content;
+            }
+          } catch (e) {
+            continue; // 单个坏块不影响整体
+          }
+          if (!delta) continue;
+
+          if (firstDelta) {
+            firstDelta = false;
+            bubble.innerHTML = '';
+          }
+          acc += delta;
+          // 流式阶段用纯文本，避免半截 Markdown/公式反复重排
+          bubble.textContent = acc;
+          scrollChat();
+        }
+        if (buffer === '' && firstDelta === false && acc) {
+          // 继续读剩余分片
+        }
+      }
+
+      if (!acc.trim()) {
+        throw new Error('模型没有返回任何内容（检查模型名是否正确）');
+      }
+      placeholder.content = acc;
+      renderChat();
+    } catch (err) {
+      const aborted = err && (err.name === 'AbortError');
+      // 把占位气泡改成错误/中止提示
+      tab.messages = tab.messages.filter(m => m !== placeholder);
+      if (aborted) {
+        if (acc.trim()) tab.messages.push({ role: 'assistant', content: acc });
+        toast('已停止生成');
+      } else {
+        tab.messages.push({
+          role: 'assistant',
+          content: readableError(err),
+          error: true
+        });
+        toast('请求失败：' + shortErr(err), 'bad');
+      }
+      renderChat();
+    } finally {
+      abortCtrl = null;
+      setStreaming(false);
+    }
+  }
+
+  function setStreaming(on) {
+    streaming = on;
+    const btn = $('#btnSend');
+    btn.textContent = on ? '停止' : '发送';
+    btn.classList.toggle('stop', on);
+    btn.disabled = false;
+  }
+
+  /** 把 HTTP 错误翻成用户能行动的话。 */
+  function httpErrorText(status, detail) {
+    const brief = truncate(detail, 400);
+    if (status === 401 || status === 403) {
+      return 'HTTP ' + status + '：API Key 被拒绝。检查 Key 是否正确、是否有该模型的权限。\n' + brief;
+    }
+    if (status === 404) {
+      return 'HTTP 404：接口地址不对。当前请求的是 ' + resolveEndpoint(cfg.baseUrl) +
+        '\n检查 Base URL 是否包含正确的版本前缀（如 /v1）。\n' + brief;
+    }
+    if (status === 429) {
+      return 'HTTP 429：触发限流或余额不足。稍后再试或检查账户额度。\n' + brief;
+    }
+    if (status >= 500) {
+      return 'HTTP ' + status + '：服务端错误，稍后重试。\n' + brief;
+    }
+    return 'HTTP ' + status + '：' + brief;
+  }
+
+  function readableError(err) {
+    const m = String((err && err.message) || err);
+    if (/Failed to fetch|NetworkError|Load failed/i.test(m)) {
+      return [
+        '无法连接到接口。通常是下面两种情况之一：',
+        '',
+        '1. **Base URL 写错**（域名、端口、路径前缀）。当前请求：',
+        '   `' + resolveEndpoint(cfg.baseUrl) + '`',
+        '2. **浏览器跨域被拦（CORS）**。浏览器直连时，服务端必须允许跨域；',
+        '   很多 API 只为服务端调用设计，不接受浏览器直连。',
+        '',
+        '排查：在浏览器开发者工具的 Network 面板看这条请求是 CORS 报错还是连接被拒。'
+      ].join('\n');
+    }
+    return m;
+  }
+
+  function shortErr(err) {
+    const m = String((err && err.message) || err);
+    return truncate(m.split('\n')[0], 120);
+  }
+
+  function truncate(s, n) {
+    s = String(s == null ? '' : s);
+    return s.length > n ? s.slice(0, n) + '…' : s;
+  }
+
+  async function safeText(res) {
+    try { return await res.text(); } catch (e) { return ''; }
+  }
+
+  function parseNonStream(text) {
+    try {
+      const obj = JSON.parse(text);
+      const c = obj.choices && obj.choices[0];
+      return (c && c.message && c.message.content) || '';
+    } catch (e) {
+      return text;
+    }
+  }
+
+  /* ==================================================================
+   * 8. 设置对话框
+   * ================================================================== */
+  const dlg = $('#settings');
+
+  function openSettings() {
+    $('#inKey').value = cfg.apiKey || '';
+    $('#inBase').value = cfg.baseUrl || '';
+    $('#inModel').value = cfg.model || '';
+    $('#testOut').textContent = '';
+    $('#testOut').className = 'test-out';
+    updateEndpointPreview();
+    if (typeof dlg.showModal === 'function') dlg.showModal();
+    else dlg.setAttribute('open', '');
+  }
+
+  function updateEndpointPreview() {
+    const el = $('#endpointPreview');
+    try {
+      const ep = resolveEndpoint($('#inBase').value);
+      el.textContent = '实际请求：' + ep;
+    } catch (e) {
+      el.textContent = '实际请求：—（请填写 Base URL）';
+    }
+  }
+
+  $('#inBase').addEventListener('input', updateEndpointPreview);
+
+  $('#btnEye').addEventListener('click', () => {
+    const inp = $('#inKey');
+    const show = inp.type === 'password';
+    inp.type = show ? 'text' : 'password';
+    $('#btnEye').textContent = show ? '隐藏' : '显示';
+  });
+
+  $('#settingsForm').addEventListener('submit', e => {
+    // method="dialog" 会自动关闭；这里只负责保存
+    const btn = e.submitter;
+    if (btn && btn.value === 'save') {
+      cfg.apiKey = $('#inKey').value.trim();
+      cfg.baseUrl = $('#inBase').value.trim();
+      cfg.model = $('#inModel').value.trim();
+      const ok = saveCfg();
+      if (!ok) toast('浏览器不允许写入 localStorage，配置只在本次会话有效', 'bad');
+      else toast('配置已保存', 'ok');
+      refreshAiState();
+    }
+  });
+
+  $('#btnClearKey').addEventListener('click', () => {
+    cfg = Object.assign({}, DEFAULT_CFG);
+    $('#inKey').value = '';
+    $('#inBase').value = DEFAULT_CFG.baseUrl;
+    $('#inModel').value = DEFAULT_CFG.model;
+    updateEndpointPreview();
+    try { localStorage.removeItem(CFG_KEY); } catch (e) {}
+    refreshAiState();
+    toast('已清除配置');
+  });
+
+  $('#btnTest').addEventListener('click', async () => {
+    const out = $('#testOut');
+    const key = $('#inKey').value.trim();
+    const base = $('#inBase').value.trim();
+    const model = $('#inModel').value.trim();
+    if (!key || !base || !model) {
+      out.className = 'test-out bad';
+      out.textContent = '三项都要填。';
+      return;
+    }
+    let ep;
+    try { ep = resolveEndpoint(base); } catch (e) {
+      out.className = 'test-out bad';
+      out.textContent = e.message;
+      return;
+    }
+    out.className = 'test-out';
+    out.textContent = '测试中…';
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 20000);
+    try {
+      const res = await fetch(ep, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },
+        body: JSON.stringify({ model: model, messages: [{ role: 'user', content: 'ping' }], max_tokens: 1 }),
+        signal: ctrl.signal
+      });
+      if (res.ok) {
+        out.className = 'test-out ok';
+        out.textContent = '连接成功（HTTP ' + res.status + '）';
+      } else {
+        const d = await safeText(res);
+        out.className = 'test-out bad';
+        out.textContent = httpErrorText(res.status, d).split('\n')[0];
+      }
+    } catch (e) {
+      out.className = 'test-out bad';
+      out.textContent = e.name === 'AbortError' ? '超时（20s）' : '无法连接，检查 URL 或 CORS';
+    } finally {
+      clearTimeout(timer);
+    }
+  });
+
+  function refreshAiState() {
+    const ready = cfgReady();
+    const pill = $('#aiPill');
+    pill.className = 'pill ' + (ready ? 'ok' : 'warn');
+    pill.textContent = ready ? '已配置' : '未配置';
+    $('#setup').hidden = ready;
+    $('#composer').style.display = ready ? '' : 'none';
+    const btn = $('#btnSend');
+    btn.disabled = !ready;
+    // 让用户随时能确认当前用的是哪个模型
+    $('#hint').textContent = ready ? cfg.model : '';
+  }
+
+  /* ==================================================================
+   * 9. 事件绑定
+   * ================================================================== */
+
+  /** 窄屏判定：与 CSS 的 900px 断点保持一致。 */
+  function isMobile() {
+    return window.matchMedia('(max-width: 900px)').matches;
+  }
+
+  /**
+   * 统一控制 AI 面板显隐。
+   *
+   * 窄屏上面板是全屏抽屉，必须同时处理三件事，否则用户会卡在里面出不来：
+   *   1. 抽屉背后的遮罩（点一下即可关闭）；
+   *   2. 抽屉头部的关闭按钮；
+   *   3. 从宽屏切到窄屏时不要把已展开的状态搞错。
+   */
+  function setAiOpen(open) {
+    const ai = $('#ai');
+    ai.dataset.collapsed = open ? '0' : '1';
+    syncBackdrop();
+  }
+
+  /** 遮罩只在「窄屏 + 面板展开」时出现。 */
+  function syncBackdrop() {
+    const open = $('#ai').dataset.collapsed !== '1';
+    const need = open && isMobile();
+    const bd = $('#aiBackdrop');
+    bd.classList.toggle('show', need);
+    bd.hidden = !need;
+  }
+
+  $('#aiBackdrop').addEventListener('click', () => setAiOpen(false));
+  $('#btnAiClose').addEventListener('click', () => setAiOpen(false));
+
+  // 断点切换：窄屏收起（否则全屏抽屉会盖住一切），宽屏展开
+  let wasMobile = isMobile();
+  window.addEventListener('resize', () => {
+    const nowMobile = isMobile();
+    if (nowMobile !== wasMobile) {
+      wasMobile = nowMobile;
+      setAiOpen(!nowMobile);
+    } else {
+      syncBackdrop();
+    }
+  });
+
+  $('#btnOpen').addEventListener('click', () => fileInput.click());
+  $('#btnPick').addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', () => {
+    openFiles(fileInput.files);
+    fileInput.value = '';
+  });
+
+  $('#btnSettings').addEventListener('click', openSettings);
+  $('#btnSetup').addEventListener('click', openSettings);
+
+  $('#btnAiToggle').addEventListener('click', () => {
+    const collapsed = $('#ai').dataset.collapsed === '1';
+    setAiOpen(collapsed);
+  });
+
+  $('#btnClearChat').addEventListener('click', () => {
+    const tab = activeTab();
+    if (!tab) return;
+    if (!tab.messages.length) return;
+    tab.messages = [];
+    renderChat();
+    toast('已清空当前对话');
+  });
+
+  $('#btnClearCtx').addEventListener('click', clearCtx);
+
+  // 发送 / 停止
+  const input = $('#input');
+  $('#btnSend').addEventListener('click', () => {
+    if (streaming) {
+      if (abortCtrl) abortCtrl.abort();
+      return;
+    }
+    const q = input.value.trim();
+    if (!q) return;
+    input.value = '';
+    autosize();
+    send(q, pendingSelection);
+    clearCtx();
+  });
+
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+      e.preventDefault();
+      $('#btnSend').click();
+    }
+  });
+
+  function autosize() {
+    input.style.height = 'auto';
+    input.style.height = Math.min(input.scrollHeight, 140) + 'px';
+  }
+  input.addEventListener('input', autosize);
+
+  // 拖拽
+  let dragDepth = 0;
+  window.addEventListener('dragenter', e => {
+    if (!e.dataTransfer || Array.from(e.dataTransfer.types || []).indexOf('Files') < 0) return;
+    dragDepth++;
+    document.body.classList.add('dragover');
+  });
+  window.addEventListener('dragover', e => {
+    if (!e.dataTransfer || Array.from(e.dataTransfer.types || []).indexOf('Files') < 0) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+  });
+  window.addEventListener('dragleave', () => {
+    dragDepth = Math.max(0, dragDepth - 1);
+    if (dragDepth === 0) document.body.classList.remove('dragover');
+  });
+  window.addEventListener('drop', e => {
+    if (!e.dataTransfer) return;
+    e.preventDefault();
+    dragDepth = 0;
+    document.body.classList.remove('dragover');
+    if (e.dataTransfer.files && e.dataTransfer.files.length) {
+      openFiles(e.dataTransfer.files);
+    }
+  });
+
+  // 快捷键
+  window.addEventListener('keydown', e => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'o') {
+      e.preventDefault();
+      fileInput.click();
+    }
+    if (e.key === 'Escape') hideAskbar();
+  });
+
+  // iframe 载入后挂选择监听
+  frame.addEventListener('load', () => {
+    hideAskbar();
+    attachSelectionHooks();
+  });
+
+  window.addEventListener('resize', hideAskbar);
+  window.addEventListener('scroll', hideAskbar, true);
+
+  /**
+   * 跟踪 visualViewport：手机软键盘弹出时布局视口不变，
+   * 只有 visualViewport 会变矮。把这个高度写成 CSS 变量，
+   * 让全屏 AI 抽屉跟着缩，输入框才不会被键盘盖住。
+   */
+  function trackViewport() {
+    if (!window.visualViewport) return;
+    const vv = window.visualViewport;
+    const apply = () => {
+      document.documentElement.style.setProperty('--app-h', Math.round(vv.height) + 'px');
+    };
+    vv.addEventListener('resize', apply);
+    vv.addEventListener('scroll', apply);
+    apply();
+  }
+
+  // 手机键盘弹出后把最新消息顶到可见处
+  input.addEventListener('focus', () => {
+    if (isMobile()) setTimeout(scrollChat, 280);
+  });
+
+  /* ==================================================================
+   * 10. 启动
+   * ================================================================== */
+  function boot() {
+    loadCfg();
+    refreshAiState();
+    renderTabs();
+    renderChat();
+    // 窄屏下面板是全屏抽屉：默认必须收起，否则一进来就被盖住
+    setAiOpen(!isMobile());
+    trackViewport();
+    if (!storageOk) {
+      toast('浏览器禁用了 localStorage，配置不会保存', 'bad');
+    }
+    if (!katexOk()) {
+      // 只是少渲染公式，不阻塞使用
+      console.info('[reader] KaTeX 未加载，AI 回答中的公式将以原文显示。');
+    }
+  }
+
+  boot();
+})();
+</script>
+</body>
+</html>
